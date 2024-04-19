@@ -1,90 +1,79 @@
-#include "myframework/gui.h"
+#include <SDL2/SDL.h>
+#include <SDL2/SDL_image.h>
+#include <iostream>
+#include <vector>
+#include <string>
 
 class Grid
 {
 private:
-	uint32 pix_width, stripes;
+	int pix_width, stripes;
 public:
-	Grid()=default;
-	Grid(uint32 pix_width, uint32 stripes):pix_width(pix_width), stripes(stripes) {}
-	uint32 operator[](size_t i)const
+	Grid(int pix_width, int stripes):pix_width(pix_width), stripes(stripes) {}
+	int operator[](size_t i)const
 	{
 		return i/pix_width%stripes;
 	}
 };
 
-SDL::Surface Merge(const std::vector<SDL::Surface>& images, Grid grid)
-try
+SDL_Surface *Merge(const std::vector<SDL_Surface*>& images, Grid grid)
 {
-	SDL::Surface result(images[0].Size(), images[0].Format());
-	for(int y=0; y<result.Size().y; ++y)
+	SDL_Surface *result = SDL_CreateRGBSurfaceWithFormat(0, images[0]->w, images[0]->h, 32, SDL_PIXELFORMAT_RGBA8888);
+	for (int y = 0; y < result->h; ++y)
 	{
-		for(int x=0; x<result.Size().x; ++x)
+		for (int x = 0; x < result->w; ++x)
 		{
-			result.Draw(SDL::Point(x,y), images[grid[x]][SDL::Point(x,y)]);
+			((uint32_t*)result->pixels)[y * result->w + x] = ((uint32_t*)images[grid[x]]->pixels)[y * result->w + x];
 		}
 	}
-	return func::Move(result);
-}
-catch(SDL::Error& err)
-{
-	throw std::runtime_error("Error: the size of images has to be the same");
+	return result;
 }
 
-SDL::Surface GridImage(SDL::Point size, Grid grid)
+SDL_Surface *GridImage(int w, int h, Grid grid)
 {
-	SDL::Surface result(size, SDL::Pixel::Format::RGBA8888);
-	for(int y=0; y<result.Size().y; ++y)
+	SDL_Surface *result = SDL_CreateRGBSurfaceWithFormat(0, w, h, 32, SDL_PIXELFORMAT_RGBA8888);
+	for (int y = 0; y < result->h; ++y)
 	{
-		for(int x=0; x<result.Size().x; ++x)
+		for (int x = 0; x < result->w; ++x)
 		{
-			result.Draw(SDL::Point(x,y), grid[x]==0?SDL::Color(255,255,255,0):SDL::Color(0,0,0));
+			((uint32_t*)result->pixels)[y * result->w + x] = SDL_MapRGBA(result->format, grid[x]==0?255:0, grid[x]==0?255:0, grid[x]==0?255:0, grid[x]==0?0:255);
 		}
 	}
-	return func::Move(result);
+	return result;
 }
 
-std::vector<SDL::Surface> GetSurfacesFromFiles(const std::vector<std::string>& files)
-try
+std::vector<SDL_Surface*> GetSurfacesFromFiles(char **files, int count)
 {
-	std::vector<SDL::Surface> surfaces;
-	for(auto& filename:files)
+	std::vector<SDL_Surface*> surfaces(count);
+	for (int i = 0; i < count; ++i)
 	{
-		surfaces.push_back(SDL::Surface::LoadImg(filename));
+		auto img = IMG_Load(files[i]);
+		auto fmt = SDL_AllocFormat(SDL_PIXELFORMAT_RGBA8888);
+		surfaces[i] = SDL_ConvertSurface(img, fmt, 0);
+		SDL_FreeFormat(fmt);
+		SDL_FreeSurface(img);
 	}
-	return func::Move(surfaces);
-}
-catch(SDL::Error& err)
-{
-	throw std::runtime_error("Error: Invalid file path");
+	return std::move(surfaces);
 }
 
-int IntDialog(gui::Init& _i, std::string label_name, std::string confirm)
+int main(int argc, char *argv[])
 {
-	return stoi(gui::Dialog(_i, "Scanimation", {{label_name, false}}, confirm, 120)[0]);
-}
+	if (argc < 2) return 1;
 
-int main()try
-{
-	gui::Init _i("font.ttf", 12);
+	SDL_Init(SDL_INIT_EVERYTHING);
+	IMG_Init(IMG_INIT_JPG | IMG_INIT_PNG | IMG_INIT_TIF | IMG_INIT_WEBP | IMG_INIT_JXL | IMG_INIT_AVIF);
 
-	SDL::MessageBox::Show("Scanimation", "This is a program for creating scanimation (barrier-grid animation)");
+	int count = argc - 1, stripe_width = 0;
+	std::cout << "Enter stripe width (px): ";
+	std::cin >> stripe_width;
 
-	uint16 count=IntDialog(_i, "Image count", "Continue");
-	auto sources=GetSurfacesFromFiles(gui::Dialog(_i, "Scanimation", std::vector<gui::InputDescription>(count, {"File path", false}), "Continue"));
-	uint32 sirka=IntDialog(_i, "Stripe width (px)", "Confirm");
+	auto sources = GetSurfacesFromFiles(&argv[1], count);
+	Grid grid(stripe_width, count);
 
-	Grid grid(sirka, sources.size());
+	auto result = Merge(sources, grid);
+	IMG_SavePNG(result, "scanimation.png");
+	IMG_SavePNG(GridImage(result->w, result->h, grid), "stripes.png");
 
-	SDL::Surface result=Merge(sources, grid);
-	result.SaveAsPNG("scanimation.png");
-
-	GridImage(result.Size(), grid).SaveAsPNG("stripes.png");
-
-	SDL::MessageBox::Show("Scanimation", "Result files scanimation.png and stripes.png are located in the folder of this program");
+	std::cout << "Result files scanimation.png and stripes.png can be found in this folder\n";
 	return 0;
-}
-catch(std::exception& exc)
-{
-	SDL::MessageBox::Show("Scanimation", exc.what());
 }
