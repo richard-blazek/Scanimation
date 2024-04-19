@@ -1,4 +1,8 @@
 # Scanimation
 Program for creating scanimation (barrier-grid animation)
 
-It requires myframework to compile (can be found at the same website where you found this).
+Usage:
+`./scanimation output-animation output-grid stripe-width input...`
+
+Example:
+`./scanimation scan.png grid.png 5 x.jpg y.jpg y.jpg y.jpg y.jpg z.jpg`
